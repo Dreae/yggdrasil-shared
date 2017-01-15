@@ -21,7 +21,7 @@ pub fn decrypt(key: &[u8], obj: &EncryptedAPIObject) -> String {
   let mut data_buffer = Vec::with_capacity(data.len());
   data_buffer.clone_from(&data);
 
-  let ref opening_key = aead::OpeningKey::new(&aead::CHACHA20_POLY1305, key).expect("Unable to create opening_key");
+  let ref opening_key = aead::OpeningKey::new(&aead::CHACHA20_POLY1305, &pad_key_as_needed(key)).expect("Unable to create opening_key");
   
   let plaintext_size = aead::open_in_place(opening_key, &nonce, 0, &mut data_buffer, &[]).expect("Unable to decrypt data");
 
@@ -35,7 +35,7 @@ pub fn encrypt(key: &[u8], data: &str) -> EncryptedAPIObject {
   let mut nonce = vec![0; nonce_len];
   SECRAND.fill(&mut nonce).expect("Error generating nonce");
 
-  let ref sealing_key = aead::SealingKey::new(&aead::CHACHA20_POLY1305, key).expect("Unable to create sealing_key");
+  let ref sealing_key = aead::SealingKey::new(&aead::CHACHA20_POLY1305, &pad_key_as_needed(key)).expect("Unable to create sealing_key");
   
   let mut buffer = Vec::from(data);
   buffer.reserve(suffix_space);
@@ -51,12 +51,33 @@ pub fn encrypt(key: &[u8], data: &str) -> EncryptedAPIObject {
   }
 }
 
+fn pad_key_as_needed(key: &[u8]) -> Vec<u8> {
+  let key_len = aead::CHACHA20_POLY1305.key_len();
+  if key.len() < key_len {
+    let mut vec = Vec::from(key);
+    for _ in key.len()..key_len {
+      vec.push(0);
+    }
+
+    vec
+  } else {
+    Vec::from(key)
+  }
+}
+
 #[cfg(test)]
 mod tests {
   #[test]
   fn encrypt_decrypt_data() {
     let api_obj = super::encrypt("foobarfoobar1234foobarfoobar1234".to_owned().as_bytes(), "123456789abcdef0");
     let data = super::decrypt("foobarfoobar1234foobarfoobar1234".to_owned().as_bytes(), &api_obj);
+    assert_eq!(data, "123456789abcdef0");
+  }
+
+  #[test]
+  fn pad_keys() {
+    let api_obj = super::encrypt("foobar".to_owned().as_bytes(), "123456789abcdef0");
+    let data = super::decrypt("foobar".to_owned().as_bytes(), &api_obj);
     assert_eq!(data, "123456789abcdef0");
   }
 }

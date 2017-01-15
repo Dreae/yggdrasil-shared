@@ -1,0 +1,10 @@
+dependencies:
+  override:
+    - rm -f ~/.gitconfig
+    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain nightly -y
+test:
+  override:
+    - $HOME/.cargo/bin/cargo test
+compile:
+  override:
+    - $HOME/.cargo/bin/cargo build

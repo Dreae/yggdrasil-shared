@@ -4,3 +4,8 @@ version = "0.1.0"
 authors = ["Dreae <dreae@dreae.onl>"]
 
 [dependencies]
+ring = "0.6.2"
+serde = "0.8.21"
+serde_derive = "0.8.21"
+rustc-serialize = "0.3.22"
+lazy_static = "0.2.2"

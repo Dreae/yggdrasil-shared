@@ -1,5 +1,8 @@
 use ring::aead;
+use serde_json;
 use ring::rand::SystemRandom;
+use serde::ser::Serialize;
+use serde::de::Deserialize;
 use rustc_serialize::base64::FromBase64;
 use rustc_serialize::base64::ToBase64;
 use rustc_serialize::base64::STANDARD;
@@ -51,6 +54,16 @@ pub fn encrypt(key: &[u8], data: &str) -> EncryptedAPIObject {
   }
 }
 
+pub fn encrypt_obj<T>(key: &[u8], obj: &T) -> EncryptedAPIObject where T: Serialize  {
+  let data = serde_json::to_string(obj).expect("Error serializing object");
+  encrypt(key, &data)
+}
+
+pub fn decrypt_obj<T>(key: &[u8], api_obj: &EncryptedAPIObject) -> T where T: Deserialize {
+  let data = decrypt(key, api_obj);
+  serde_json::from_str(&data).expect("Error deserializing plaintext")
+}
+
 fn pad_key_as_needed(key: &[u8]) -> Vec<u8> {
   let key_len = aead::CHACHA20_POLY1305.key_len();
   if key.len() < key_len {
@@ -72,6 +85,25 @@ mod tests {
     let api_obj = super::encrypt("foobarfoobar1234foobarfoobar1234".to_owned().as_bytes(), "123456789abcdef0");
     let data = super::decrypt("foobarfoobar1234foobarfoobar1234".to_owned().as_bytes(), &api_obj);
     assert_eq!(data, "123456789abcdef0");
+  }
+
+  #[derive(Serialize, Deserialize)]
+  struct Point {
+    x: i32,
+    y: i32,
+  }
+
+  #[test]
+  fn encrypt_decrypt_objects() {
+    let point = Point {
+      x: 1,
+      y: 2,
+    };
+
+    let api_obj = super::encrypt_obj("foobar".to_owned().as_bytes(), &point);
+    let point_out: Point = super::decrypt_obj("foobar".to_owned().as_bytes(), &api_obj);
+    assert_eq!(point_out.x, 1);
+    assert_eq!(point_out.y, 2);
   }
 
   #[test]

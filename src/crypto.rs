@@ -6,6 +6,14 @@ use serde::de::Deserialize;
 use rustc_serialize::base64::FromBase64;
 use rustc_serialize::base64::ToBase64;
 use rustc_serialize::base64::STANDARD;
+use rocket::request::Request;
+use rocket::data::{Data, FromData};
+use rocket::Outcome::*;
+use rocket::http::Status;
+use rocket::data;
+use std::env;
+
+use std::io::Read;
 
 #[derive(Serialize, Deserialize)]
 pub struct EncryptedAPIObject {
@@ -15,6 +23,32 @@ pub struct EncryptedAPIObject {
 
 lazy_static! {
   pub static ref SECRAND: SystemRandom = SystemRandom::new();
+  pub static ref APIKEY: String = env::var("API_KEY").expect("API_KEY to be set");
+}
+
+pub struct DecryptedAPIObject<T> {
+  pub object: T,
+}
+
+impl <T> FromData for DecryptedAPIObject<T> where T: Deserialize {
+  type Error = String;
+
+  fn from_data(_: &Request, data: Data) -> data::Outcome<DecryptedAPIObject<T>, String> {
+    let mut string = String::new();
+    if let Err(e) = data.open().read_to_string(&mut string) {
+      return Failure((Status::InternalServerError, format!("Error reading request body: {}", e)));
+    }
+
+    let api_obj = if let Ok(obj) = serde_json::from_str::<EncryptedAPIObject>(&string) {
+      obj
+    } else {
+      return Failure((Status::InternalServerError, "Request body is not a valid API object".to_owned()));
+    };
+
+    Success(DecryptedAPIObject {
+      object: decrypt_obj::<T>(APIKEY.as_bytes(), &api_obj),
+    })
+  }
 }
 
 pub fn decrypt(key: &[u8], obj: &EncryptedAPIObject) -> String {
